@@ -182,7 +182,7 @@ async def main():
     to_check_404 = []
 
     # Reduced max_workers for slower 404 checking
-    with ThreadPoolExecutor(max_workers=200) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor:
         futures = [executor.submit(check_404, url) for url in to_check]
         for future in as_completed(futures):
             url, status = future.result()
@@ -193,7 +193,7 @@ async def main():
         save_to_excel(to_check_404, output404_file)
 
     # Step 3: Fetch PageSpeed Insights for non-404 URLs
-    output_pagespeed_file = 'outputers_introspection.xlsx'
+    output_pagespeed_file = 'output_introspection.xlsx'
     to_check_pagespeed = [url for url in all_urls if url not in to_check_404]
     results = []
 

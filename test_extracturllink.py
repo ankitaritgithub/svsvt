@@ -18,7 +18,7 @@ from test_selenium import crawl_website
 # Function to set up Selenium WebDriver
 def get_selenium_driver():
     chrome_options = Options()
-    # chrome_options.add_argument("--headless")  # Run in headless mode (no UI)
+    chrome_options.add_argument("--headless")  # Run in headless mode (no UI)
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
@@ -144,7 +144,7 @@ async def main():
     to_check_404 = []
 
     # Reduced max_workers for slower 404 checking
-    with ThreadPoolExecutor(max_workers=200) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor:
         futures = [executor.submit(check_404, url) for url in to_check]
         for future in as_completed(futures):
             url, status = future.result()
@@ -155,13 +155,13 @@ async def main():
         save_to_excel(to_check_404, output404_file)
 
     # Step 3: Fetch PageSpeed Insights for non-404 URLs
-    output_pagespeed_file = 'outputs_introspections.xlsx'
+    output_pagespeed_file = 'output_introspections.xlsx'
     to_check_pagespeed = [url for url in all_urls if url not in to_check_404]
     results = []
 
     if to_check_pagespeed:
         async with aiohttp.ClientSession() as session:
-            semaphore = asyncio.Semaphore(50)  # Reduced concurrency
+            semaphore = asyncio.Semaphore(10)  # Reduced concurrency
             tasks = []
             for url in to_check_pagespeed:
                 tasks.append(fetch_pagespeed_insights_async(url, session, api_key, "desktop", semaphore))
