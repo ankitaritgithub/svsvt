@@ -1,36 +1,35 @@
 import time
+import requests
 import pandas as pd
 import asyncio
 import aiohttp
 import urllib.parse
-from urllib.parse import urlparse, urljoin
+from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
+from urllib.parse import urlparse, urljoin
 
-# Function to extract links from a webpage using Selenium
+# Function to extract links from a webpage
 def extract_links(url, retries=3):
-    options = Options()
-    options.add_argument('--headless')  # Run in headless mode (no GUI)
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    
-    service = Service('/path/to/chromedriver')  # Replace with the path to your ChromeDriver
-    driver = webdriver.Chrome(service=service, options=options)
-
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'DNT': '1',
+    }
     for attempt in range(retries):
         try:
-            driver.get(url)
-            time.sleep(2)  # Allow some time for the page to load
-            links = driver.find_elements(By.TAG_NAME, 'a')
-            url_list = [link.get_attribute('href') for link in links if link.get_attribute('href').startswith('http')]
-            driver.quit()
-            return url_list
-        except Exception as e:
+            response = requests.get(url, headers=headers, timeout=10, verify=True)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, "html.parser")
+                links = soup.find_all('a', href=True)
+                url_list = [link['href'] for link in links if link['href'].startswith('http')]
+                return url_list
+            else:
+                print(f"Failed to retrieve {url}: Status code {response.status_code}")
+                return []
+        except requests.exceptions.RequestException as e:
             print(f"Error occurred while fetching {url}: {e}")
-            driver.quit()
             return []
 
 # Asynchronous function to fetch PageSpeed Insights using Lighthouse with retry logic
@@ -101,19 +100,16 @@ def extract_metrics(data, url, url_encoded, strategy):
 # Function to check if a URL redirects to a 404 page
 def check_404(url):
     try:
-        driver = webdriver.Chrome(service=Service('/path/to/chromedriver'), options=Options())
-        driver.get(url)
-        if driver.current_url == url and driver.title == "404 Not Found":  # Check title for 404
-            driver.quit()
+        response = requests.get(url, timeout=10)
+        if response.status_code == 404:
             return url, "Redirects to 404"
-        driver.quit()
         return url, "Pass"
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         print(f"Error occurred while checking {url}: {e}")
         return url, "Error checking URL"
 
 # Optimized URL checking in Excel
-def check_urls_in_excel(input_excel_file, output_excel_file, max_workers=10):
+def check_urls_in_excel(input_excel_file, output_excel_file, max_workers=10):  # Reduced max_workers
     df = pd.read_excel(input_excel_file)
 
     if 'URL' not in df.columns:
@@ -132,12 +128,11 @@ def check_urls_in_excel(input_excel_file, output_excel_file, max_workers=10):
     df.to_excel(output_excel_file, index=False)
     print(f"Results written to {output_excel_file}")
 
-# Function to crawl a website and collect all the URLs using Selenium
+# Function to crawl a website and collect all the URLs
 def crawl_website(start_url, domain, all_urls=None):
     if all_urls is None:
         all_urls = set()
 
-    driver = webdriver.Chrome(service=Service('/path/to/chromedriver'), options=Options())
     to_crawl = [start_url]
 
     while to_crawl:
@@ -157,13 +152,12 @@ def crawl_website(start_url, domain, all_urls=None):
 
         time.sleep(0.5)  # Increased sleep time to slow down crawling speed
 
-    driver.quit()  # Close the WebDriver
     return all_urls
 
 # Function to save results to an Excel file
 def save_to_excel(urls, output_file):
     df = pd.DataFrame(list(urls), columns=["URL"])
-    df.to_excel(output_file, index=False)
+    df.to_excel(output_file, index=False, engine='openpyxl')
     print(f"Saved {len(urls)} URLs to {output_file}")
 
 # Function to save PageSpeed Insights results to Excel
@@ -199,7 +193,7 @@ async def main():
         save_to_excel(to_check_404, output404_file)
 
     # Step 3: Fetch PageSpeed Insights for non-404 URLs
-    output_pagespeed_file = 'outputers_introspection.xlsx'
+    output_pagespeed_file = 'output_introspection.xlsx'
     to_check_pagespeed = [url for url in all_urls if url not in to_check_404]
     results = []
 
